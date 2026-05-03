@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EKG Assisted Interpretation</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <link rel="stylesheet" href="styles/components.css">
+    <!-- Import Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="app-header">
+        <div class="header-content">
+            <h1>EKG Assisted Interpretation</h1>
+            <p class="subtitle">Systematic analysis for clinicians</p>
+        </div>
+        <div class="api-key-container">
+            <input type="password" id="gemini-api-key" placeholder="Enter Gemini API Key (Required for summary)">
+        </div>
+    </header>
+
+    <main class="app-main">
+        <div class="progress-bar-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+
+        <div class="steps-container" id="steps-container">
+            <!-- Auto-Fill Step -->
+            <section class="step-card active" id="step-autofill" data-step="0">
+                <h2>0. Smart Import (Optional)</h2>
+                <p class="help-text mb-4">Upload an ECG and provide clinical context to have AI auto-fill the findings for you. You will still review and approve the findings in the next steps.</p>
+                
+                <div class="input-group">
+                    <label for="ecg-upload">Upload ECG Image</label>
+                    <input type="file" id="ecg-upload" accept="image/*" class="w-full">
+                </div>
+
+                <div class="input-group mt-4">
+                    <label for="ecg-context">Clinical Context</label>
+                    <textarea id="ecg-context" placeholder="e.g. 55yo male with chest pain. Known history of hypertension..." rows="3" class="w-full" style="padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-tertiary); color: var(--text-primary); resize: vertical;"></textarea>
+                </div>
+
+                <div class="ai-box mt-4">
+                    <div id="autofill-loading" class="hidden">
+                        <div class="spinner"></div>
+                        <p>Analyzing ECG and auto-filling forms...</p>
+                    </div>
+                    <p class="error-text hidden" id="autofill-error"></p>
+                </div>
+
+                <div class="step-actions mt-4">
+                    <button class="btn btn-outline" id="skip-autofill-btn">Skip to Manual Entry</button>
+                    <button class="btn btn-primary" id="do-autofill-btn">Analyze & Auto-Fill</button>
+                </div>
+            </section>
+
+            <!-- Rate Step -->
+            <section class="step-card" id="step-rate" data-step="1">
+                <h2>1. Rate</h2>
+                <div class="input-group">
+                    <label for="heart-rate">What is the heart rate (bpm)?</label>
+                    <input type="number" id="heart-rate" placeholder="e.g. 75" min="0" max="300">
+                </div>
+                <div class="step-actions">
+                    <button class="btn btn-secondary prev-btn">Back to Smart Import</button>
+                    <button class="btn btn-primary next-btn">Next: Rhythm</button>
+                </div>
+            </section>
+
+            <!-- Rhythm Step -->
+            <section class="step-card" id="step-rhythm" data-step="2">
+                <h2>2. Rhythm</h2>
+                <div class="options-grid" id="rhythm-primary-options">
+                    <button class="btn btn-outline rhythm-opt" data-value="Normal Sinus Rhythm">Sinus</button>
+                    <button class="btn btn-outline rhythm-opt" data-value="Atrial Fibrillation">A-Fib</button>
+                    <button class="btn btn-outline rhythm-opt" data-value="Junctional">Junctional</button>
+                    <button class="btn btn-outline rhythm-opt" data-value="Unsure" id="rhythm-unsure-btn">Unsure</button>
+                </div>
+
+                <div id="rhythm-unsure-flow" class="hidden flow-container">
+                    <h3>Let's figure it out:</h3>
+                    <div class="input-group">
+                        <label>Is it regular or irregular?</label>
+                        <select id="rhythm-regularity">
+                            <option value="" disabled selected>Select...</option>
+                            <option value="Regular">Regular</option>
+                            <option value="Irregular">Irregular</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Are there P waves?</label>
+                        <select id="rhythm-pwaves">
+                            <option value="" disabled selected>Select...</option>
+                            <option value="Present">Present</option>
+                            <option value="Absent">Absent</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Still unsure? Describe it:</label>
+                        <input type="text" id="rhythm-freetext" placeholder="e.g. erratic baseline, wide QRS">
+                    </div>
+                </div>
+
+                <div class="step-actions">
+                    <button class="btn btn-secondary prev-btn">Back</button>
+                    <button class="btn btn-primary next-btn">Next: Axis</button>
+                </div>
+            </section>
+
+            <!-- Axis Step -->
+            <section class="step-card" id="step-axis" data-step="3">
+                <h2>3. Axis</h2>
+                <div class="options-grid" id="axis-primary-options">
+                    <button class="btn btn-outline axis-opt" data-value="Normal">Normal</button>
+                    <button class="btn btn-outline axis-opt" data-value="Left Axis Deviation">Left Axis</button>
+                    <button class="btn btn-outline axis-opt" data-value="Right Axis Deviation">Right Axis</button>
+                    <button class="btn btn-outline axis-opt" data-value="Extreme Axis Deviation">Extreme</button>
+                    <button class="btn btn-outline axis-opt" data-value="Unsure" id="axis-calculate-btn">Calculate it for me</button>
+                </div>
+
+                <div id="axis-calculator" class="hidden flow-container">
+                    <h3>Enter QRS polarity (net positive/negative deflection in mm):</h3>
+                    <div class="input-row">
+                        <div class="input-group">
+                            <label for="axis-lead1">Lead I</label>
+                            <input type="number" id="axis-lead1" placeholder="e.g. +5">
+                        </div>
+                        <div class="input-group">
+                            <label for="axis-avf">Lead aVF</label>
+                            <input type="number" id="axis-avf" placeholder="e.g. -3">
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" id="do-calc-axis">Calculate Axis</button>
+                    <div id="axis-calc-result" class="calc-result"></div>
+                </div>
+
+                <div class="step-actions">
+                    <button class="btn btn-secondary prev-btn">Back</button>
+                    <button class="btn btn-primary next-btn">Next: Intervals</button>
+                </div>
+            </section>
+
+            <!-- Intervals Step -->
+            <section class="step-card" id="step-intervals" data-step="4">
+                <h2>4. Intervals</h2>
+                <div class="input-grid">
+                    <div class="input-group">
+                        <label for="int-pr">PR Interval (ms)</label>
+                        <input type="number" id="int-pr" placeholder="120-200">
+                    </div>
+                    <div class="input-group">
+                        <label for="int-qrs">QRS Duration (ms)</label>
+                        <input type="number" id="int-qrs" placeholder="< 120">
+                    </div>
+                    <div class="input-group">
+                        <label for="int-qt">QT Interval (ms)</label>
+                        <input type="number" id="int-qt" placeholder="Raw QT">
+                    </div>
+                </div>
+                
+                <div class="calculator-box">
+                    <button class="btn btn-secondary" id="do-calc-qtc">Calculate QTc (Bazett's)</button>
+                    <p class="help-text">Uses the heart rate entered in Step 1 (<span id="hr-display-int">--</span> bpm)</p>
+                    <div id="qtc-calc-result" class="calc-result"></div>
+                </div>
+
+                <div class="step-actions">
+                    <button class="btn btn-secondary prev-btn">Back</button>
+                    <button class="btn btn-primary next-btn">Next: Morphology</button>
+                </div>
+            </section>
+
+            <!-- Morphology Step -->
+            <section class="step-card" id="step-morphology" data-step="5">
+                <h2>5. Morphology</h2>
+                <p class="help-text mb-4">Evaluate each component. If abnormal, provide details.</p>
+
+                <!-- Voltages -->
+                <div class="morphology-group">
+                    <h3>Voltages</h3>
+                    <div class="options-grid small">
+                        <button class="btn btn-outline morph-opt" data-category="voltage" data-value="Normal">Normal</button>
+                        <button class="btn btn-outline morph-opt" data-category="voltage" data-value="Abnormal">Abnormal</button>
+                        <button class="btn btn-outline morph-opt" data-category="voltage" data-value="Unsure">Unsure</button>
+                    </div>
+                    <div class="morph-abnormal hidden" id="morph-voltage-abnormal">
+                        <div class="options-flex">
+                            <label><input type="checkbox" name="voltage-abn" value="Low Voltage"> Low Voltage</label>
+                            <label><input type="checkbox" name="voltage-abn" value="High Voltage (LVH)"> High Voltage (LVH)</label>
+                        </div>
+                    </div>
+                    <div class="morph-unsure hidden" id="morph-voltage-unsure">
+                        <input type="text" placeholder="Describe the voltage..." class="morph-freetext" data-category="voltage">
+                    </div>
+                </div>
+
+                <!-- P Waves -->
+                <div class="morphology-group">
+                    <h3>P Waves</h3>
+                    <div class="options-grid small">
+                        <button class="btn btn-outline morph-opt" data-category="pwave" data-value="Normal">Normal</button>
+                        <button class="btn btn-outline morph-opt" data-category="pwave" data-value="Abnormal">Abnormal</button>
+                        <button class="btn btn-outline morph-opt" data-category="pwave" data-value="Unsure">Unsure</button>
+                    </div>
+                    <div class="morph-abnormal hidden" id="morph-pwave-abnormal">
+                        <div class="options-flex">
+                            <label><input type="checkbox" name="pwave-abn" value="Biphasic (V1)"> Biphasic (V1)</label>
+                            <label><input type="checkbox" name="pwave-abn" value="Peaked/Tall (II)"> Peaked/Tall (>2.5mm)</label>
+                            <label><input type="checkbox" name="pwave-abn" value="Wide/Notched"> Wide/Notched</label>
+                        </div>
+                    </div>
+                    <div class="morph-unsure hidden" id="morph-pwave-unsure">
+                        <input type="text" placeholder="Describe the P wave..." class="morph-freetext" data-category="pwave">
+                        <a href="https://litfl.com/p-wave-ecg-library/" target="_blank" class="resource-link">LITFL: P Wave Guide</a>
+                    </div>
+                </div>
+
+                <!-- Q Waves -->
+                <div class="morphology-group">
+                    <h3>Q Waves</h3>
+                    <div class="options-grid small">
+                        <button class="btn btn-outline morph-opt" data-category="qwave" data-value="Normal">Normal</button>
+                        <button class="btn btn-outline morph-opt" data-category="qwave" data-value="Abnormal">Abnormal (Pathologic)</button>
+                        <button class="btn btn-outline morph-opt" data-category="qwave" data-value="Unsure">Unsure</button>
+                    </div>
+                    <div class="morph-abnormal hidden" id="morph-qwave-abnormal">
+                        <div class="options-flex">
+                            <label><input type="checkbox" name="qwave-abn" value="Inferior (II, III, aVF)"> Inferior</label>
+                            <label><input type="checkbox" name="qwave-abn" value="Anterior (V1-V4)"> Anterior</label>
+                            <label><input type="checkbox" name="qwave-abn" value="Lateral (I, aVL, V5, V6)"> Lateral</label>
+                        </div>
+                    </div>
+                    <div class="morph-unsure hidden" id="morph-qwave-unsure">
+                        <input type="text" placeholder="Describe the Q wave..." class="morph-freetext" data-category="qwave">
+                        <a href="https://litfl.com/q-wave-ecg-library/" target="_blank" class="resource-link">LITFL: Q Wave Guide</a>
+                    </div>
+                </div>
+
+                <!-- ST Segment -->
+                <div class="morphology-group">
+                    <h3>ST Segment</h3>
+                    <div class="options-grid small">
+                        <button class="btn btn-outline morph-opt" data-category="st" data-value="Normal">Normal (Isoelectric)</button>
+                        <button class="btn btn-outline morph-opt" data-category="st" data-value="Abnormal">Abnormal</button>
+                        <button class="btn btn-outline morph-opt" data-category="st" data-value="Unsure">Unsure</button>
+                    </div>
+                    <div class="morph-abnormal hidden" id="morph-st-abnormal">
+                        <div class="options-flex">
+                            <label><input type="checkbox" name="st-abn" value="Elevation (Concave)"> Elevation (Concave)</label>
+                            <label><input type="checkbox" name="st-abn" value="Elevation (Convex)"> Elevation (Convex)</label>
+                            <label><input type="checkbox" name="st-abn" value="Depression"> Depression</label>
+                        </div>
+                        <input type="text" class="mt-2 w-full" id="st-leads" placeholder="Which leads? (e.g. V1-V3, II, III, aVF)">
+                    </div>
+                    <div class="morph-unsure hidden" id="morph-st-unsure">
+                        <input type="text" placeholder="Describe the ST segment..." class="morph-freetext" data-category="st">
+                        <a href="https://litfl.com/st-segment-ecg-library/" target="_blank" class="resource-link">LITFL: ST Segment Guide</a>
+                    </div>
+                </div>
+
+                <!-- T Waves -->
+                <div class="morphology-group">
+                    <h3>T Waves</h3>
+                    <div class="options-grid small">
+                        <button class="btn btn-outline morph-opt" data-category="twave" data-value="Normal">Normal</button>
+                        <button class="btn btn-outline morph-opt" data-category="twave" data-value="Abnormal">Abnormal</button>
+                        <button class="btn btn-outline morph-opt" data-category="twave" data-value="Unsure">Unsure</button>
+                    </div>
+                    <div class="morph-abnormal hidden" id="morph-twave-abnormal">
+                        <div class="options-flex">
+                            <label><input type="checkbox" name="twave-abn" value="Inverted"> Inverted</label>
+                            <label><input type="checkbox" name="twave-abn" value="Peaked/Hyperacute"> Peaked/Hyperacute</label>
+                            <label><input type="checkbox" name="twave-abn" value="Flattened"> Flattened</label>
+                            <label><input type="checkbox" name="twave-abn" value="Biphasic"> Biphasic</label>
+                        </div>
+                        <input type="text" class="mt-2 w-full" id="twave-leads" placeholder="Which leads?">
+                    </div>
+                    <div class="morph-unsure hidden" id="morph-twave-unsure">
+                        <input type="text" placeholder="Describe the T wave..." class="morph-freetext" data-category="twave">
+                        <a href="https://litfl.com/t-wave-ecg-library/" target="_blank" class="resource-link">LITFL: T Wave Guide</a>
+                    </div>
+                </div>
+
+
+                <div class="step-actions">
+                    <button class="btn btn-secondary prev-btn">Back</button>
+                    <button class="btn btn-primary next-btn">Generate Summary</button>
+                </div>
+            </section>
+
+            <!-- Summary Step -->
+            <section class="step-card" id="step-summary" data-step="6">
+                <h2>6. Interpretation Summary</h2>
+                
+                <div class="summary-box">
+                    <h3>Findings</h3>
+                    <ul id="summary-list">
+                        <!-- Populated by JS -->
+                    </ul>
+                </div>
+
+                <div class="ai-box">
+                    <h3>Clinical Context & Baseline</h3>
+                    <textarea id="baseline-ecg" class="w-full mt-2" placeholder="e.g. Known inferior Q waves, history of old MI..." rows="2" style="padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-tertiary); color: var(--text-primary); resize: vertical; margin-bottom: 1rem; width: 100%; box-sizing: border-box;"></textarea>
+
+                    <h3>Differential Diagnosis</h3>
+                    <div id="ai-loading" class="hidden">
+                        <div class="spinner"></div>
+                        <p>Generating differential with Gemini API...</p>
+                    </div>
+                    <div id="ai-result">
+                        <p class="placeholder-text">Click below to generate a differential diagnosis based on the findings above.</p>
+                    </div>
+                    <button class="btn btn-primary mt-4" id="generate-diff-btn">Generate Differential</button>
+                    <p class="error-text hidden mt-2" id="ai-error"></p>
+                </div>
+
+                <div class="step-actions mt-4">
+                    <button class="btn btn-secondary prev-btn">Back to Edit</button>
+                    <button class="btn btn-outline" id="reset-btn">Start Over</button>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Application Logic -->
+    <script src="js/app.js"></script>
+    <script src="js/steps/autofill.js"></script>
+    <script src="js/steps/rate.js"></script>
+    <script src="js/steps/rhythm.js"></script>
+    <script src="js/steps/axis.js"></script>
+    <script src="js/steps/intervals.js"></script>
+    <script src="js/steps/morphology.js"></script>
+    <script src="js/steps/summary.js"></script>
+</body>
+</html>
